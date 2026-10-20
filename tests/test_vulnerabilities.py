@@ -9,66 +9,98 @@ def login(username, password):
     assert res.status_code == 200, f"Login failed for {username}"
     return res.json()["token"]
 
-def test_vulnerability_1_sql_injection():
-    """Verify TH-01: SQL injection bypasses query filters to dump all datasets."""
+# ---------------------------------------------------------
+# 1. VULNERABILITY MITIGATION TESTS
+# ---------------------------------------------------------
+
+def test_mitigation_1_sql_injection():
+    """Verify TH-01: SQL injection payload is neutralized and returns safely."""
     alice_token = login("alice", "AlicePass!123")
     headers = {"Authorization": f"Bearer {alice_token}"}
 
-    # Inject OR condition to return all database rows
     payload = "' OR '1'='1"
     res = requests.get(f"{API_GATEWAY}/api/datasets/search?q={payload}", headers=headers)
+    
     assert res.status_code == 200
     records = res.json()
+    # The parameterized query should treat the payload as a literal string, finding 0 results.
+    assert len(records) == 0, "System still vulnerable to SQL injection!"
 
-    # Confirms exploitability: both dataset 1 and dataset 2 returned
-    assert len(records) >= 2, "SQL injection failed to dump records"
-    print("\n[+] Vulnerability 1 (SQLi) confirmed: dumped all records.")
-
-def test_vulnerability_2_idor():
-    """Verify TH-02: Alice can directly access Bob's private dataset (ID 2)."""
+def test_mitigation_2_idor():
+    """Verify TH-02: Alice is explicitly blocked from accessing Bob's dataset (ID 2)."""
     alice_token = login("alice", "AlicePass!123")
     headers = {"Authorization": f"Bearer {alice_token}"}
 
-    # Alice queries Dataset 2 (owned by Bob)
     res = requests.get(f"{API_GATEWAY}/api/datasets/2", headers=headers)
-    assert res.status_code == 200
-    data = res.json()
+    
+    # Complete Mediation enforces ABAC: must return 403 Forbidden
+    assert res.status_code == 403, "System still vulnerable to IDOR!"
 
-    assert data["owner_id"] == 3, "IDOR failed to access Bob's data"
-    print("\n[+] Vulnerability 2 (IDOR) confirmed: Alice accessed Bob's dataset.")
+def test_mitigation_3_race_condition():
+    """Verify TH-03: Atomic transactions prevent quota limit bypass."""
+    # First, let's explicitly reset the quota to 1 for this test
+    # (In a real test suite, you'd use a setup fixture for this)
+    import sqlite3
+    conn = sqlite3.connect("resource_service/research_vault.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET export_quota = 1 WHERE username = 'alice'")
+    conn.commit()
+    conn.close()
 
-def test_vulnerability_3_race_condition():
-    """Verify TH-03: Concurrent requests bypass quota limits (State Failure)."""
     alice_token = login("alice", "AlicePass!123")
     headers = {"Authorization": f"Bearer {alice_token}"}
 
-    # Alice starts with quota = 1. We launch 2 parallel requests to consume quota.
     def call_consume():
         return requests.post(f"{API_GATEWAY}/api/datasets/consume-quota", headers=headers)
 
+    # Alice has exactly 1 quota left. We fire 2 requests at the exact same time.
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         f1 = executor.submit(call_consume)
         f2 = executor.submit(call_consume)
         r1 = f1.result()
         r2 = f2.result()
 
-    # Both parallel calls succeeded despite quota being only 1
-    assert r1.status_code == 200 and r2.status_code == 200
-    print("\n[+] Vulnerability 3 (Race Condition) confirmed: Quota consumed concurrently beyond limit.")
+    status_codes = [r1.status_code, r2.status_code]
+    
+    # Exactly one request must succeed (200), and the other must fail (403)
+    assert 200 in status_codes and 403 in status_codes, "Race condition mitigation failed!"
 
-def test_vulnerability_4_confused_deputy_composition():
-    """Verify TH-04: Alice tricks Processing Service into exporting Bob's dataset."""
+def test_mitigation_4_confused_deputy_composition():
+    """Verify TH-04: Processing service cannot bypass ownership checks."""
     alice_token = login("alice", "AlicePass!123")
     headers = {"Authorization": f"Bearer {alice_token}"}
 
-    # Alice requests export of Bob's dataset (ID 2)
+    # Alice requests export of Bob's dataset (ID 2). 
+    # Processing Service forwards Alice's token, so Resource Service should deny it.
     res = requests.post(f"{API_GATEWAY}/api/export-job", json={"dataset_id": 2}, headers=headers)
-    assert res.status_code == 200
-    data = res.json()
+    
+    # Must return a failure status (403 from Resource Service cascades to 403/502 in API)
+    assert res.status_code in [403, 502], "Confused Deputy cross-service exploit still active!"
 
-    assert data["status"] == "COMPLETED"
-    assert "Atmospheric Carbon Analysis" in data["summary"]
-    print("\n[+] Vulnerability 4 (Confused Deputy) confirmed: Unauthorized cross-service export succeeded.")
 
-if __name__ == "__main__":
-    pytest.main(["-s", __file__])
+# ---------------------------------------------------------
+# 2. MALFORMED ARTIFACT & ROBUSTNESS TESTS (Grading Requirement)
+# ---------------------------------------------------------
+
+def test_malformed_artifact_invalid_token():
+    """Verify System safely rejects malformed/tampered JWT tokens."""
+    # We send a structurally broken token (not base64, missing signature)
+    headers = {"Authorization": "Bearer this.is.a.malformed.garbage.token"}
+    res = requests.get(f"{API_GATEWAY}/api/datasets/search?q=Genomic", headers=headers)
+    
+    # Fail-Safe Default: Must explicitly reject with 401 Unauthorized
+    assert res.status_code == 401
+    assert "Invalid token" in res.json().get("error", "")
+
+def test_malformed_artifact_missing_payload():
+    """Verify System safely rejects malformed JSON payloads."""
+    alice_token = login("alice", "AlicePass!123")
+    headers = {"Authorization": f"Bearer {alice_token}"}
+
+    # We send an empty/malformed payload instead of {"dataset_id": 1}
+    res = requests.post(f"{API_GATEWAY}/api/export-job", json={}, headers=headers)
+    
+    # Must reject with 400 Bad Request
+    assert res.status_code == 400
+    # Update the assertion to match the actual error message from processing_service
+    assert "dataset_id" in res.json().get("error", "")
