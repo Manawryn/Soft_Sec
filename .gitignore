@@ -218,3 +218,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Virtual Environment
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Local Databases (We want the script to generate this fresh, not track binary state)
+*.db
+*.sqlite3
+
+# Package build artifacts
+*.egg-info/
+build/
+dist/
+
+# IDE files
+.vscode/
