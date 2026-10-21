@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     environment {
-        // Enforce secure environment variables during build
-        JWT_SECRET = credentials('prod-jwt-secret') // Requires Jenkins credentials configuration
+        // Securely injects the credential you created
+        JWT_SECRET = credentials('prod-jwt-secret') 
     }
     
     stages {
@@ -16,10 +16,12 @@ pipeline {
         stage('Build & Install') {
             steps {
                 bat '''
-                python -m venv venv
+                if not exist venv ( python -m venv venv )
                 call venv\\Scripts\\activate.bat
+                python -m pip install --upgrade pip setuptools wheel
                 pip install -r requirements.txt
                 pip install -e external_pkg
+                if not exist reports ( mkdir reports )
                 '''
             }
         }
@@ -28,7 +30,8 @@ pipeline {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                bandit -r app_api resource_service processing_service -f json -o reports/bandit_report.json || exit 0
+                :: Using python -m prevents the pbr module wrapper bug on Windows
+                python -m bandit -r app_api resource_service processing_service -f json -o reports/bandit_report.json || exit 0
                 '''
             }
         }
@@ -37,7 +40,7 @@ pipeline {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                pip-audit -r requirements.txt --format json > reports/audit_report.json || exit 0
+                python -m pip_audit -r requirements.txt --format json > reports/audit_report.json || exit 0
                 '''
             }
         }
@@ -48,14 +51,19 @@ pipeline {
                 call venv\\Scripts\\activate.bat
                 python resource_service/database.py
                 
-                start "App" cmd /c "call venv\\Scripts\\activate.bat && python app_api/app.py"
-                start "Resource" cmd /c "call venv\\Scripts\\activate.bat && python resource_service/app.py"
-                start "Processing" cmd /c "call venv\\Scripts\\activate.bat && python processing_service/app.py"
+                :: Launch Flask apps silently in the background (Jenkins safe)
+                start /B "" python resource_service/app.py
+                start /B "" python processing_service/app.py
+                start /B "" python app_api/app.py
                 
-                timeout /t 3 /nobreak >nul
+                :: Wait 5 seconds for the servers to boot up
+                timeout /t 5 /nobreak >nul
+                
+                :: Execute the verification suite
                 pytest -v tests/test_vulnerabilities.py > reports/test_results.txt
                 
-                taskkill /F /IM python.exe /T
+                :: Gracefully kill background python processes when done
+                taskkill /F /IM python.exe /T || exit 0
                 '''
             }
         }
