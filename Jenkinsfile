@@ -19,8 +19,13 @@ pipeline {
                 if not exist venv ( python -m venv venv )
                 call venv\\Scripts\\activate.bat
                 python -m pip install --upgrade pip setuptools wheel
+                
+                :: Explicitly install pbr to fix the Bandit missing module bug
+                pip install pbr
                 pip install -r requirements.txt
                 pip install -e external_pkg
+                
+                :: Ensure reports directory exists
                 if not exist reports ( mkdir reports )
                 '''
             }
@@ -30,8 +35,8 @@ pipeline {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                :: Using python -m prevents the pbr module wrapper bug on Windows
-                python -m bandit -r app_api resource_service processing_service -f json -o reports/bandit_report.json || exit 0
+                :: Use backslashes for Windows path redirection
+                python -m bandit -r app_api resource_service processing_service -f json -o reports\\bandit_report.json || exit 0
                 '''
             }
         }
@@ -40,7 +45,8 @@ pipeline {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                python -m pip_audit -r requirements.txt --format json > reports/audit_report.json || exit 0
+                :: Use backslashes for Windows path redirection
+                python -m pip_audit -r requirements.txt --format json > reports\\audit_report.json || exit 0
                 '''
             }
         }
@@ -49,18 +55,18 @@ pipeline {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                python resource_service/database.py
+                python resource_service\\database.py
                 
-                :: Launch Flask apps silently in the background (Jenkins safe)
-                start /B "" python resource_service/app.py
-                start /B "" python processing_service/app.py
-                start /B "" python app_api/app.py
+                :: Feed < NUL to stdin to prevent Jenkins headless console crash
+                start /B "" cmd /c "python resource_service\\app.py > NUL 2>&1 < NUL"
+                start /B "" cmd /c "python processing_service\\app.py > NUL 2>&1 < NUL"
+                start /B "" cmd /c "python app_api\\app.py > NUL 2>&1 < NUL"
                 
                 :: Wait 5 seconds for the servers to boot up
                 timeout /t 5 /nobreak >nul
                 
                 :: Execute the verification suite
-                pytest -v tests/test_vulnerabilities.py > reports/test_results.txt
+                pytest -v tests\\test_vulnerabilities.py > reports\\test_results.txt
                 
                 :: Gracefully kill background python processes when done
                 taskkill /F /IM python.exe /T || exit 0
