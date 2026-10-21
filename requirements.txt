@@ -3,5 +3,5 @@ requests==2.31.0
 pyjwt==2.8.0
 werkzeug==2.3.7
 pytest==7.4.2
-bandit==1.7.5
+bandit
 pip-audit==2.6.1
