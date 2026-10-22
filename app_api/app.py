@@ -8,7 +8,7 @@ from functools import wraps
 app = Flask(__name__)
 
 # SECURITY FIX: Read secret from environment variable (Defaults to string for local dev)
-JWT_SECRET = os.environ.get("JWT_SECRET", "super-secret-hardcoded-key-12345")
+JWT_SECRET = os.environ["JWT_SECRET"]
 RESOURCE_SERVICE_URL = "http://127.0.0.1:5002"
 PROCESSING_SERVICE_URL = "http://127.0.0.1:5003"
 
@@ -49,20 +49,20 @@ def login():
 @token_required
 def search_datasets(current_user):
     q = request.args.get("q", "")
-    res = requests.get(f"{RESOURCE_SERVICE_URL}/resources/search?q={q}")
+    res = requests.get(f"{RESOURCE_SERVICE_URL}/resources/search", params={"q": q}, timeout=3)
     return jsonify(res.json()), res.status_code
 
 @app.route("/api/datasets/<int:dataset_id>", methods=["GET"])
 @token_required
 def get_dataset(current_user, dataset_id):
     headers = {"Authorization": request.headers.get("Authorization")}
-    res = requests.get(f"{RESOURCE_SERVICE_URL}/resources/dataset/{dataset_id}", headers=headers)
+    res = requests.get(f"{RESOURCE_SERVICE_URL}/resources/dataset/{dataset_id}", headers=headers, timeout=3)
     return jsonify(res.json()), res.status_code
 
 @app.route("/api/datasets/consume-quota", methods=["POST"])
 @token_required
 def consume_quota(current_user):
-    res = requests.post(f"{RESOURCE_SERVICE_URL}/resources/quota/consume", json={"user_id": current_user["user_id"]})
+    res = requests.post(f"{RESOURCE_SERVICE_URL}/resources/quota/consume", json={"user_id": current_user["user_id"]}, timeout=3)
     return jsonify(res.json()), res.status_code
 
 @app.route("/api/export-job", methods=["POST"])
