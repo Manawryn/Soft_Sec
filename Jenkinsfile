@@ -33,17 +33,15 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('SAST Security Scan (Bandit)') {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                :: Use backslashes for Windows path redirection
-                python -m bandit -r app_api resource_service processing_service -f json -o reports\\bandit_report.json || exit 0
+                bandit -r app_api resource_service processing_service -f json -o reports\\bandit_report.json || exit 0
                 '''
             }
         }
-        
         
         stage('Functional & Authorization Tests') {
             steps {
@@ -51,7 +49,7 @@ pipeline {
                 call venv\\Scripts\\activate.bat
                 python resource_service\\database.py
                 
-                :: Feed < NUL to stdin to prevent Jenkins headless console crash
+                :: Start the servers silently in the background
                 start /B "" cmd /c "python resource_service\\app.py > NUL 2>&1 < NUL"
                 start /B "" cmd /c "python processing_service\\app.py > NUL 2>&1 < NUL"
                 start /B "" cmd /c "python app_api\\app.py > NUL 2>&1 < NUL"
