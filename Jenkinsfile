@@ -16,7 +16,10 @@ pipeline {
         stage('Build & Install') {
             steps {
                 bat '''
-                if not exist venv ( python -m venv venv )
+                :: Delete the old venv to force a completely fresh installation
+                if exist venv ( rmdir /s /q venv )
+                
+                python -m venv venv
                 call venv\\Scripts\\activate.bat
                 python -m pip install --upgrade pip setuptools wheel
                 
