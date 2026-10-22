@@ -1,89 +1,70 @@
 pipeline {
     agent any
-    
-    environment {
-        // Securely injects the credential you created
-        JWT_SECRET = credentials('prod-jwt-secret') 
-    }
-    
+    triggers { pollSCM('H/2 * * * *') }   // localhost can't receive GitHub webhooks
+    environment { JWT_SECRET = credentials('prod-jwt-secret') }
+
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { deleteDir(); checkout scm }   // fresh workspace: no stale DB or venv
         }
-        
         stage('Build & Install') {
             steps {
                 bat '''
-                :: Delete the old venv to force a completely fresh installation
-                if exist venv ( rmdir /s /q venv )
-                
                 python -m venv venv
                 call venv\\Scripts\\activate.bat
                 python -m pip install --upgrade pip setuptools wheel
-                
-                :: Explicitly install pbr to fix the Bandit missing module bug
                 pip install pbr
                 pip install -r requirements.txt
                 pip install -e external_pkg
-                
-                :: Ensure reports directory exists
-                if not exist reports ( mkdir reports )
+                mkdir reports
                 '''
             }
         }
-
-        stage('SAST Security Scan (Bandit)') {
+        stage('SAST (Bandit)') {
             steps {
                 bat '''
                 call venv\\Scripts\\activate.bat
-                bandit -r app_api resource_service processing_service -f json -o reports\\bandit_report.json || exit 0
+                python -m bandit -r app_api resource_service processing_service -f json -o reports\\bandit_report.json || exit /b 0
                 '''
             }
         }
-        
-        stage('Functional & Authorization Tests') {
+        stage('Dependency Audit (SCA)') {
             steps {
-                bat '''
-                call venv\\Scripts\\activate.bat
-                python resource_service\\database.py
-                
-                :: Start the servers silently in the background
-                start /B "" cmd /c "python resource_service\\app.py > NUL 2>&1 < NUL"
-                start /B "" cmd /c "python processing_service\\app.py > NUL 2>&1 < NUL"
-                start /B "" cmd /c "python app_api\\app.py > NUL 2>&1 < NUL"
-                
-                :: Wait 5 seconds for the servers to boot up
-                timeout /t 5 /nobreak >nul
-                
-                :: Execute the verification suite
-                pytest -v tests\\test_vulnerabilities.py > reports\\test_results.txt
-                
-                :: Gracefully kill background python processes when done
-                taskkill /F /IM python.exe /T || exit 0
-                '''
-            }
-        }
-        
-        stage('Security Gate Decision') {
-            steps {
-                script {
-                    def banditReport = readJSON file: 'reports/bandit_report.json'
-                    def highSeverityCount = banditReport.metrics._totals.SEVERITY.HIGH
-                    
-                    if (highSeverityCount > 0) {
-                        error("GATE FAILED: ${highSeverityCount} High severity vulnerabilities found. Release blocked.")
-                    } else {
-                        echo "GATE PASSED: No High severity vulnerabilities detected."
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        bat '''
+                        call venv\\Scripts\\activate.bat
+                        python -m pip_audit --local --timeout 30 -f json -o reports\\pip_audit.json
+                        '''
                     }
                 }
             }
         }
+        stage('Functional & Authorization Tests') {
+            steps {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    bat '''
+                    call venv\\Scripts\\activate.bat
+                    python -m pytest -v --junitxml=reports\\junit.xml > reports\\test_results.txt 2>&1
+                    set RC=%ERRORLEVEL%
+                    type reports\\test_results.txt
+                    exit /b %RC%
+                    '''
+                }
+            }
+        }
+        stage('Security Gate') {
+            steps {
+                bat '''
+                call venv\\Scripts\\activate.bat
+                python ci\\security_gate.py
+                '''
+            }
+        }
     }
-    
     post {
         always {
+            junit allowEmptyResults: true, testResults: 'reports/junit.xml'
             archiveArtifacts artifacts: 'reports/*.*', allowEmptyArchive: true
         }
     }

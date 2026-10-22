@@ -13,26 +13,23 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
-            export_quota INTEGER DEFAULT 5
-        )
-    """)
+    cursor.execute("DROP TABLE IF EXISTS datasets")
+    cursor.execute("DROP TABLE IF EXISTS users")
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS datasets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            owner_id INTEGER NOT NULL,
-            metrics TEXT NOT NULL,
-            classification TEXT DEFAULT 'CONFIDENTIAL',
-            FOREIGN KEY (owner_id) REFERENCES users (id)
-        )
-    """)
+    cursor.execute("""CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        export_quota INTEGER DEFAULT 5)""")
+
+    cursor.execute("""CREATE TABLE datasets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        owner_id INTEGER NOT NULL,
+        metrics TEXT NOT NULL,
+        classification TEXT DEFAULT 'CONFIDENTIAL',
+        FOREIGN KEY (owner_id) REFERENCES users (id))""")
 
     cursor.execute("DELETE FROM users")
     cursor.execute("DELETE FROM datasets")

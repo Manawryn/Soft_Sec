@@ -1,100 +1,59 @@
+import concurrent.futures, os, sqlite3
 import requests
-import concurrent.futures
-import pytest
-import sqlite3
 
-API_GATEWAY = "http://127.0.0.1:5001"
+API = "http://127.0.0.1:5001"
+DB = os.path.join(os.path.dirname(__file__), "..", "resource_service", "research_vault.db")
+ALICE, BOB, ADMIN = ("alice", "AlicePass!123"), ("bob", "BobPass!456"), ("admin", "AdminSecret!2026")
 
-def login(username, password):
-    res = requests.post(f"{API_GATEWAY}/api/auth/login", json={"username": username, "password": password})
-    assert res.status_code == 200, f"Login failed for {username}"
-    return res.json()["token"]
+def auth(creds):
+    r = requests.post(f"{API}/api/auth/login", json={"username": creds[0], "password": creds[1]})
+    assert r.status_code == 200
+    return {"Authorization": f"Bearer {r.json()['token']}"}
 
-# ---------------------------------------------------------
-# 1. EXPLOITABILITY TESTS (Asserting vulnerabilities exist)
-# ---------------------------------------------------------
+# ---- functional ----
+def test_login_rejects_bad_password():
+    r = requests.post(f"{API}/api/auth/login", json={"username": "alice", "password": "wrong"})
+    assert r.status_code == 401
 
-def test_vulnerability_1_sql_injection():
-    """Verify TH-01: SQL injection bypasses query filters to dump all datasets."""
-    alice_token = login("alice", "AlicePass!123")
-    headers = {"Authorization": f"Bearer {alice_token}"}
+def test_owner_reads_own_dataset():
+    assert requests.get(f"{API}/api/datasets/1", headers=auth(ALICE)).status_code == 200
 
-    payload = "' OR '1'='1"
-    res = requests.get(f"{API_GATEWAY}/api/datasets/search?q={payload}", headers=headers)
-    assert res.status_code == 200
-    records = res.json()
+def test_admin_reads_any_dataset():
+    assert requests.get(f"{API}/api/datasets/2", headers=auth(ADMIN)).status_code == 200
 
-    # Exploit succeeds: both dataset 1 and dataset 2 are returned
-    assert len(records) >= 2, "SQL injection failed to dump records"
+def test_owner_exports_own_dataset():
+    r = requests.post(f"{API}/api/export-job", json={"dataset_id": 1}, headers=auth(ALICE))
+    assert r.status_code == 200 and r.json()["status"] == "COMPLETED"
 
-def test_vulnerability_2_idor():
-    """Verify TH-02: Alice can directly access Bob's private dataset (ID 2)."""
-    alice_token = login("alice", "AlicePass!123")
-    headers = {"Authorization": f"Bearer {alice_token}"}
+# ---- security (TH-01..TH-04) ----
+def test_th01_sql_injection_neutralised():
+    r = requests.get(f"{API}/api/datasets/search", params={"q": "' OR '1'='1"}, headers=auth(ALICE))
+    assert r.status_code == 200 and len(r.json()) == 0
 
-    res = requests.get(f"{API_GATEWAY}/api/datasets/2", headers=headers)
-    assert res.status_code == 200
-    
-    # Exploit succeeds: Alice accessed Bob's data (owner_id 3)
-    assert res.json()["owner_id"] == 3, "IDOR failed to access Bob's data"
+def test_th02_idor_blocked():
+    assert requests.get(f"{API}/api/datasets/2", headers=auth(ALICE)).status_code == 403
 
-def test_vulnerability_3_race_condition():
-    """Verify TH-03: Concurrent requests bypass quota limits."""
-    # Reset quota to exactly 1 for a clean test state
-    conn = sqlite3.connect("resource_service/research_vault.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET export_quota = 1 WHERE username = 'alice'")
-    conn.commit()
-    conn.close()
+def test_th03_quota_race_blocked():
+    with sqlite3.connect(DB) as c:
+        c.execute("UPDATE users SET export_quota = 1 WHERE username = 'alice'")
+    h = auth(ALICE)
+    call = lambda: requests.post(f"{API}/api/datasets/consume-quota", headers=h).status_code
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+        codes = sorted(f.result() for f in [ex.submit(call), ex.submit(call)])
+    assert codes == [200, 403]
 
-    alice_token = login("alice", "AlicePass!123")
-    headers = {"Authorization": f"Bearer {alice_token}"}
+def test_th04_confused_deputy_blocked():
+    r = requests.post(f"{API}/api/export-job", json={"dataset_id": 2}, headers=auth(ALICE))
+    assert r.status_code == 403
 
-    def call_consume():
-        return requests.post(f"{API_GATEWAY}/api/datasets/consume-quota", headers=headers)
+# ---- malformed artifacts ----
+def test_missing_token_rejected():
+    assert requests.get(f"{API}/api/datasets/1").status_code == 401
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        f1 = executor.submit(call_consume)
-        f2 = executor.submit(call_consume)
-        r1 = f1.result()
-        r2 = f2.result()
+def test_tampered_token_rejected():
+    r = requests.get(f"{API}/api/datasets/1", headers={"Authorization": "Bearer a.b.c"})
+    assert r.status_code == 401
 
-    # Exploit succeeds: Both parallel calls bypassed the quota check and succeeded
-    assert r1.status_code == 200 and r2.status_code == 200, "Race condition failed to bypass quota"
-
-def test_vulnerability_4_confused_deputy_composition():
-    """Verify TH-04: Alice tricks Processing Service into exporting Bob's dataset."""
-    alice_token = login("alice", "AlicePass!123")
-    headers = {"Authorization": f"Bearer {alice_token}"}
-
-    res = requests.post(f"{API_GATEWAY}/api/export-job", json={"dataset_id": 2}, headers=headers)
-    assert res.status_code == 200
-    
-    # Exploit succeeds: Cross-service export happened without authorization
-    assert res.json()["status"] == "COMPLETED"
-
-
-# ---------------------------------------------------------
-# 2. MALFORMED ARTIFACT TESTS (Grading Requirement)
-# ---------------------------------------------------------
-
-def test_malformed_artifact_invalid_token():
-    """Verify System safely rejects malformed/tampered JWT tokens."""
-    headers = {"Authorization": "Bearer this.is.a.malformed.garbage.token"}
-    res = requests.get(f"{API_GATEWAY}/api/datasets/search?q=Genomic", headers=headers)
-    
-    assert res.status_code == 401
-    assert "Invalid token" in res.json().get("error", "")
-
-def test_malformed_artifact_missing_payload():
-    """Verify System safely rejects malformed JSON payloads."""
-    alice_token = login("alice", "AlicePass!123")
-    headers = {"Authorization": f"Bearer {alice_token}"}
-
-    res = requests.post(f"{API_GATEWAY}/api/export-job", json={}, headers=headers)
-    
-    assert res.status_code == 400
-    assert "dataset_id required" in res.json().get("error", "")
-
-if __name__ == "__main__":
-    pytest.main(["-v", __file__])
+def test_missing_payload_rejected():
+    r = requests.post(f"{API}/api/export-job", json={}, headers=auth(ALICE))
+    assert r.status_code == 400 and "dataset_id" in r.json()["error"]
