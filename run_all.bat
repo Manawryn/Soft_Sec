@@ -17,6 +17,8 @@ echo [*] Initializing SQLite database...
 python resource_service\database.py
 
 echo [*] Starting Services in separate processes...
+
+if not defined JWT_SECRET set JWT_SECRET=local-dev-only-secret
 start "Resource Service (5002)" cmd /k "call venv\Scripts\activate.bat && python resource_service\app.py"
 timeout /t 2 /nobreak >nul
 
