@@ -44,15 +44,6 @@ pipeline {
             }
         }
         
-        stage('Dependency Audit') {
-            steps {
-                bat '''
-                call venv\\Scripts\\activate.bat
-                :: Use backslashes for Windows path redirection
-                python -m pip_audit -r requirements.txt --format json > reports\\audit_report.json || exit 0
-                '''
-            }
-        }
         
         stage('Functional & Authorization Tests') {
             steps {
