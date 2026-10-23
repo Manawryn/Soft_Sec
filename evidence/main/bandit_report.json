@@ -1,0 +1,233 @@
+{
+  "errors": [],
+  "generated_at": "2026-10-23T10:30:34Z",
+  "metrics": {
+    "_totals": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 5,
+      "CONFIDENCE.MEDIUM": 3,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 3,
+      "SEVERITY.MEDIUM": 5,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 287,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app_api\\app.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 4,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 4,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 84,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "processing_service\\app.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 34,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "resource_service\\app.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 1,
+      "CONFIDENCE.MEDIUM": 2,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 114,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "resource_service\\database.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 55,
+      "nosec": 0,
+      "skipped_tests": 0
+    }
+  },
+  "results": [
+    {
+      "code": "9 # INTENTIONAL SAST FLAW: Hardcoded secret (CWE-798, Bandit B105 - high severity finding)\n10 JWT_SECRET = \"super-secret-hardcoded-key-12345\"\n11 \n",
+      "col_offset": 13,
+      "end_col_offset": 47,
+      "filename": "app_api\\app.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 259,
+        "link": "https://cwe.mitre.org/data/definitions/259.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Possible hardcoded password: 'super-secret-hardcoded-key-12345'",
+      "line_number": 10,
+      "line_range": [
+        10
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+      "test_id": "B105",
+      "test_name": "hardcoded_password_string"
+    },
+    {
+      "code": "66     q = request.args.get(\"q\", \"\")\n67     res = requests.get(f\"{RESOURCE_SERVICE_URL}/resources/search?q={q}\")\n68     return jsonify(res.json()), res.status_code\n",
+      "col_offset": 10,
+      "end_col_offset": 72,
+      "filename": "app_api\\app.py",
+      "issue_confidence": "LOW",
+      "issue_cwe": {
+        "id": 400,
+        "link": "https://cwe.mitre.org/data/definitions/400.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Call to requests without timeout",
+      "line_number": 67,
+      "line_range": [
+        67
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html",
+      "test_id": "B113",
+      "test_name": "request_without_timeout"
+    },
+    {
+      "code": "74     # FLAW: Fails Complete Mediation. Does not check if current_user owns the dataset\n75     res = requests.get(f\"{RESOURCE_SERVICE_URL}/resources/dataset/{dataset_id}\")\n76     return jsonify(res.json()), res.status_code\n",
+      "col_offset": 10,
+      "end_col_offset": 80,
+      "filename": "app_api\\app.py",
+      "issue_confidence": "LOW",
+      "issue_cwe": {
+        "id": 400,
+        "link": "https://cwe.mitre.org/data/definitions/400.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Call to requests without timeout",
+      "line_number": 75,
+      "line_range": [
+        75
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html",
+      "test_id": "B113",
+      "test_name": "request_without_timeout"
+    },
+    {
+      "code": "81 def consume_quota(current_user):\n82     res = requests.post(f\"{RESOURCE_SERVICE_URL}/resources/quota/consume\", json={\"user_id\": current_user[\"user_id\"]})\n83     return jsonify(res.json()), res.status_code\n",
+      "col_offset": 10,
+      "end_col_offset": 117,
+      "filename": "app_api\\app.py",
+      "issue_confidence": "LOW",
+      "issue_cwe": {
+        "id": 400,
+        "link": "https://cwe.mitre.org/data/definitions/400.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Call to requests without timeout",
+      "line_number": 82,
+      "line_range": [
+        82
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html",
+      "test_id": "B113",
+      "test_name": "request_without_timeout"
+    },
+    {
+      "code": "106 def get_export(current_user, export_id):\n107     res = requests.get(f\"{RESOURCE_SERVICE_URL}/resources/exports/{export_id}\")\n108     return jsonify(res.json()), res.status_code\n",
+      "col_offset": 10,
+      "end_col_offset": 79,
+      "filename": "app_api\\app.py",
+      "issue_confidence": "LOW",
+      "issue_cwe": {
+        "id": 400,
+        "link": "https://cwe.mitre.org/data/definitions/400.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Call to requests without timeout",
+      "line_number": 107,
+      "line_range": [
+        107
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html",
+      "test_id": "B113",
+      "test_name": "request_without_timeout"
+    },
+    {
+      "code": "38     # INTENTIONAL FLAW: String formatting creates injection vector\n39     query = f\"SELECT id, title, owner_id, classification FROM datasets WHERE title LIKE '%{keyword}%'\"\n40     try:\n",
+      "col_offset": 14,
+      "end_col_offset": 90,
+      "filename": "resource_service\\app.py",
+      "issue_confidence": "LOW",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 39,
+      "line_range": [
+        39
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "93     internal_token = request.headers.get(\"X-Internal-Service\")\n94     if internal_token != \"processing-engine-internal-secret\":\n95         return jsonify({\"error\": \"Unauthorized internal call\"}), 403\n",
+      "col_offset": 25,
+      "end_col_offset": 60,
+      "filename": "resource_service\\app.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 259,
+        "link": "https://cwe.mitre.org/data/definitions/259.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Possible hardcoded password: 'processing-engine-internal-secret'",
+      "line_number": 94,
+      "line_range": [
+        94
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+      "test_id": "B105",
+      "test_name": "hardcoded_password_string"
+    },
+    {
+      "code": "113     internal_token = request.headers.get(\"X-Internal-Service\")\n114     if internal_token != \"processing-engine-internal-secret\":\n115         return jsonify({\"error\": \"Unauthorized internal call\"}), 403\n",
+      "col_offset": 25,
+      "end_col_offset": 60,
+      "filename": "resource_service\\app.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 259,
+        "link": "https://cwe.mitre.org/data/definitions/259.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Possible hardcoded password: 'processing-engine-internal-secret'",
+      "line_number": 114,
+      "line_range": [
+        114
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+      "test_id": "B105",
+      "test_name": "hardcoded_password_string"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="14" time="15.209" timestamp="2026-10-23T12:31:09.197109+02:00" hostname="Nitro"><testcase classname="tests.test_vulnerabilities" name="test_login_rejects_bad_password" time="11.418" /><testcase classname="tests.test_vulnerabilities" name="test_owner_reads_own_dataset" time="0.238" /><testcase classname="tests.test_vulnerabilities" name="test_admin_reads_any_dataset" time="0.260" /><testcase classname="tests.test_vulnerabilities" name="test_owner_exports_own_dataset" time="0.557" /><testcase classname="tests.test_vulnerabilities" name="test_th01_sql_injection_neutralised" time="0.260"><failure message="AssertionError: assert (200 == 200 and 2 == 0)&#10; +  where 200 = &lt;Response [200]&gt;.status_code&#10; +  and   2 = len([{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}])&#10; +    where [{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}] = json()&#10; +      where json = &lt;Response [200]&gt;.json">def test_th01_sql_injection_neutralised():
+        r = requests.get(f"{API}/api/datasets/search", params={"q": "' OR '1'='1"}, headers=auth(ALICE))
+&gt;       assert r.status_code == 200 and len(r.json()) == 0
+E       AssertionError: assert (200 == 200 and 2 == 0)
+E        +  where 200 = &lt;Response [200]&gt;.status_code
+E        +  and   2 = len([{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}])
+E        +    where [{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}] = json()
+E        +      where json = &lt;Response [200]&gt;.json
+
+tests\test_vulnerabilities.py:36: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_th02_idor_blocked" time="0.253"><failure message="AssertionError: assert 200 == 403&#10; +  where 200 = &lt;Response [200]&gt;.status_code&#10; +    where &lt;Response [200]&gt; = &lt;function get at 0x00000158CE9CCCA0&gt;('http://127.0.0.1:5001/api/datasets/2', headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'})&#10; +      where &lt;function get at 0x00000158CE9CCCA0&gt; = requests.get&#10; +      and   {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'} = auth(('alice', 'AlicePass!123'))">def test_th02_idor_blocked():
+&gt;       assert requests.get(f"{API}/api/datasets/2", headers=auth(ALICE)).status_code == 403
+E       AssertionError: assert 200 == 403
+E        +  where 200 = &lt;Response [200]&gt;.status_code
+E        +    where &lt;Response [200]&gt; = &lt;function get at 0x00000158CE9CCCA0&gt;('http://127.0.0.1:5001/api/datasets/2', headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'})
+E        +      where &lt;function get at 0x00000158CE9CCCA0&gt; = requests.get
+E        +      and   {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'} = auth(('alice', 'AlicePass!123'))
+
+tests\test_vulnerabilities.py:39: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_th03_quota_race_blocked" time="0.350"><failure message="assert [200, 200] == [200, 403]&#10;  &#10;  At index 1 diff: 200 != 403&#10;  &#10;  Full diff:&#10;    [&#10;        200,&#10;  -     403,&#10;  ?     ^ ^&#10;  +     200,&#10;  ?     ^ ^&#10;    ]">def test_th03_quota_race_blocked():
+        with sqlite3.connect(DB) as c:
+            c.execute("UPDATE users SET export_quota = 1 WHERE username = 'alice'")
+        h = auth(ALICE)
+        call = lambda: requests.post(f"{API}/api/datasets/consume-quota", headers=h).status_code
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+            codes = sorted(f.result() for f in [ex.submit(call), ex.submit(call)])
+&gt;       assert codes == [200, 403]
+E       assert [200, 200] == [200, 403]
+E         
+E         At index 1 diff: 200 != 403
+E         
+E         Full diff:
+E           [
+E               200,
+E         -     403,
+E         ?     ^ ^
+E         +     200,
+E         ?     ^ ^
+E           ]
+
+tests\test_vulnerabilities.py:48: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_th04_confused_deputy_blocked" time="0.299"><failure message="assert 200 == 403&#10; +  where 200 = &lt;Response [200]&gt;.status_code">def test_th04_confused_deputy_blocked():
+        r = requests.post(f"{API}/api/export-job", json={"dataset_id": 2}, headers=auth(ALICE))
+&gt;       assert r.status_code == 403
+E       assert 200 == 403
+E        +  where 200 = &lt;Response [200]&gt;.status_code
+
+tests\test_vulnerabilities.py:52: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_th05_resource_service_quota_requires_authentication" time="0.007"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403]&gt;.status_code">def test_th05_resource_service_quota_requires_authentication():
+        # The Resource Service itself must reject an unauthenticated call, not
+        # just the API gateway in front of it - defense in depth. A request
+        # that merely names a user_id in the body (ambient trust) must not work.
+        r = requests.post(f"{RESOURCE}/resources/quota/consume", json={"user_id": 2})
+&gt;       assert r.status_code == 401
+E       assert 403 == 401
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+
+tests\test_vulnerabilities.py:60: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_th06_search_filtered_by_ownership" time="0.293"><failure message="assert [1, 2] == [2]&#10;  &#10;  At index 0 diff: 1 != 2&#10;  Left contains one more item: 2&#10;  &#10;  Full diff:&#10;    [&#10;  +     1,&#10;        2,&#10;    ]">def test_th06_search_filtered_by_ownership():
+        # A non-admin's search must only ever return their own datasets, not
+        # every user's titles/owners/classifications.
+        r = requests.get(f"{API}/api/datasets/search", params={"q": ""}, headers=auth(BOB))
+        assert r.status_code == 200
+&gt;       assert [d["id"] for d in r.json()] == [2]
+E       assert [1, 2] == [2]
+E         
+E         At index 0 diff: 1 != 2
+E         Left contains one more item: 2
+E         
+E         Full diff:
+E           [
+E         +     1,
+E               2,
+E           ]
+
+tests\test_vulnerabilities.py:67: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_export_retrieval_blocked_for_non_owner" time="0.549"><failure message="assert 200 == 403&#10; +  where 200 = &lt;Response [200]&gt;.status_code">def test_export_retrieval_blocked_for_non_owner():
+        # Saved export artifacts are owned the same way datasets are - one
+        # user's completed export must not be readable by another user.
+        r = requests.post(f"{API}/api/export-job", json={"dataset_id": 1}, headers=auth(ALICE))
+        export_id = r.json()["export_id"]
+        r2 = requests.get(f"{API}/api/exports/{export_id}", headers=auth(BOB))
+&gt;       assert r2.status_code == 403
+E       assert 200 == 403
+E        +  where 200 = &lt;Response [200]&gt;.status_code
+
+tests\test_vulnerabilities.py:75: AssertionError</failure></testcase><testcase classname="tests.test_vulnerabilities" name="test_missing_token_rejected" time="0.003" /><testcase classname="tests.test_vulnerabilities" name="test_tampered_token_rejected" time="0.004" /><testcase classname="tests.test_vulnerabilities" name="test_missing_payload_rejected" time="0.231" /></testsuite></testsuites>

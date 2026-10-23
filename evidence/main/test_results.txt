@@ -1,0 +1,164 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.4, pytest-9.1.1, pluggy-1.7.0 -- C:\ProgramData\Jenkins\.jenkins\workspace\ISRM_Security_Pipeline\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\ProgramData\Jenkins\.jenkins\workspace\ISRM_Security_Pipeline
+collecting ... collected 14 items
+
+tests/test_vulnerabilities.py::test_login_rejects_bad_password PASSED    [  7%]
+tests/test_vulnerabilities.py::test_owner_reads_own_dataset PASSED       [ 14%]
+tests/test_vulnerabilities.py::test_admin_reads_any_dataset PASSED       [ 21%]
+tests/test_vulnerabilities.py::test_owner_exports_own_dataset PASSED     [ 28%]
+tests/test_vulnerabilities.py::test_th01_sql_injection_neutralised FAILED [ 35%]
+tests/test_vulnerabilities.py::test_th02_idor_blocked FAILED             [ 42%]
+tests/test_vulnerabilities.py::test_th03_quota_race_blocked FAILED       [ 50%]
+tests/test_vulnerabilities.py::test_th04_confused_deputy_blocked FAILED  [ 57%]
+tests/test_vulnerabilities.py::test_th05_resource_service_quota_requires_authentication FAILED [ 64%]
+tests/test_vulnerabilities.py::test_th06_search_filtered_by_ownership FAILED [ 71%]
+tests/test_vulnerabilities.py::test_export_retrieval_blocked_for_non_owner FAILED [ 78%]
+tests/test_vulnerabilities.py::test_missing_token_rejected PASSED        [ 85%]
+tests/test_vulnerabilities.py::test_tampered_token_rejected PASSED       [ 92%]
+tests/test_vulnerabilities.py::test_missing_payload_rejected PASSED      [100%]
+
+================================== FAILURES ===================================
+_____________________ test_th01_sql_injection_neutralised _____________________
+
+    def test_th01_sql_injection_neutralised():
+        r = requests.get(f"{API}/api/datasets/search", params={"q": "' OR '1'='1"}, headers=auth(ALICE))
+>       assert r.status_code == 200 and len(r.json()) == 0
+E       AssertionError: assert (200 == 200 and 2 == 0)
+E        +  where 200 = <Response [200]>.status_code
+E        +  and   2 = len([{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}])
+E        +    where [{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}] = json()
+E        +      where json = <Response [200]>.json
+
+tests\test_vulnerabilities.py:36: AssertionError
+___________________________ test_th02_idor_blocked ____________________________
+
+    def test_th02_idor_blocked():
+>       assert requests.get(f"{API}/api/datasets/2", headers=auth(ALICE)).status_code == 403
+E       AssertionError: assert 200 == 403
+E        +  where 200 = <Response [200]>.status_code
+E        +    where <Response [200]> = <function get at 0x00000158CE9CCCA0>('http://127.0.0.1:5001/api/datasets/2', headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'})
+E        +      where <function get at 0x00000158CE9CCCA0> = requests.get
+E        +      and   {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'} = auth(('alice', 'AlicePass!123'))
+
+tests\test_vulnerabilities.py:39: AssertionError
+________________________ test_th03_quota_race_blocked _________________________
+
+    def test_th03_quota_race_blocked():
+        with sqlite3.connect(DB) as c:
+            c.execute("UPDATE users SET export_quota = 1 WHERE username = 'alice'")
+        h = auth(ALICE)
+        call = lambda: requests.post(f"{API}/api/datasets/consume-quota", headers=h).status_code
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+            codes = sorted(f.result() for f in [ex.submit(call), ex.submit(call)])
+>       assert codes == [200, 403]
+E       assert [200, 200] == [200, 403]
+E         
+E         At index 1 diff: 200 != 403
+E         
+E         Full diff:
+E           [
+E               200,
+E         -     403,
+E         ?     ^ ^
+E         +     200,
+E         ?     ^ ^
+E           ]
+
+tests\test_vulnerabilities.py:48: AssertionError
+______________________ test_th04_confused_deputy_blocked ______________________
+
+    def test_th04_confused_deputy_blocked():
+        r = requests.post(f"{API}/api/export-job", json={"dataset_id": 2}, headers=auth(ALICE))
+>       assert r.status_code == 403
+E       assert 200 == 403
+E        +  where 200 = <Response [200]>.status_code
+
+tests\test_vulnerabilities.py:52: AssertionError
+__________ test_th05_resource_service_quota_requires_authentication ___________
+
+    def test_th05_resource_service_quota_requires_authentication():
+        # The Resource Service itself must reject an unauthenticated call, not
+        # just the API gateway in front of it - defense in depth. A request
+        # that merely names a user_id in the body (ambient trust) must not work.
+        r = requests.post(f"{RESOURCE}/resources/quota/consume", json={"user_id": 2})
+>       assert r.status_code == 401
+E       assert 403 == 401
+E        +  where 403 = <Response [403]>.status_code
+
+tests\test_vulnerabilities.py:60: AssertionError
+___________________ test_th06_search_filtered_by_ownership ____________________
+
+    def test_th06_search_filtered_by_ownership():
+        # A non-admin's search must only ever return their own datasets, not
+        # every user's titles/owners/classifications.
+        r = requests.get(f"{API}/api/datasets/search", params={"q": ""}, headers=auth(BOB))
+        assert r.status_code == 200
+>       assert [d["id"] for d in r.json()] == [2]
+E       assert [1, 2] == [2]
+E         
+E         At index 0 diff: 1 != 2
+E         Left contains one more item: 2
+E         
+E         Full diff:
+E           [
+E         +     1,
+E               2,
+E           ]
+
+tests\test_vulnerabilities.py:67: AssertionError
+_________________ test_export_retrieval_blocked_for_non_owner _________________
+
+    def test_export_retrieval_blocked_for_non_owner():
+        # Saved export artifacts are owned the same way datasets are - one
+        # user's completed export must not be readable by another user.
+        r = requests.post(f"{API}/api/export-job", json={"dataset_id": 1}, headers=auth(ALICE))
+        export_id = r.json()["export_id"]
+        r2 = requests.get(f"{API}/api/exports/{export_id}", headers=auth(BOB))
+>       assert r2.status_code == 403
+E       assert 200 == 403
+E        +  where 200 = <Response [200]>.status_code
+
+tests\test_vulnerabilities.py:75: AssertionError
+- generated xml file: C:\ProgramData\Jenkins\.jenkins\workspace\ISRM_Security_Pipeline\reports\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/test_vulnerabilities.py::test_th01_sql_injection_neutralised - AssertionError: assert (200 == 200 and 2 == 0)
+ +  where 200 = <Response [200]>.status_code
+ +  and   2 = len([{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}])
+ +    where [{'classification': 'RESTRICTED', 'id': 1, 'owner_id': 2, 'title': 'Genomic Sequencing Alpha'}, {'classification': 'CONFIDENTIAL', 'id': 2, 'owner_id': 3, 'title': 'Atmospheric Carbon Analysis'}] = json()
+ +      where json = <Response [200]>.json
+FAILED tests/test_vulnerabilities.py::test_th02_idor_blocked - AssertionError: assert 200 == 403
+ +  where 200 = <Response [200]>.status_code
+ +    where <Response [200]> = <function get at 0x00000158CE9CCCA0>('http://127.0.0.1:5001/api/datasets/2', headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'})
+ +      where <function get at 0x00000158CE9CCCA0> = requests.get
+ +      and   {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImFsaWNlIiwicm9sZSI6InJlc2VhcmNoZXIiLCJleHAiOjE3OTI3NTg2ODJ9.FOqMfkuqu2rOJZhBsxECKbc1Lh_U2DBNoXnviWMQI2I'} = auth(('alice', 'AlicePass!123'))
+FAILED tests/test_vulnerabilities.py::test_th03_quota_race_blocked - assert [200, 200] == [200, 403]
+  
+  At index 1 diff: 200 != 403
+  
+  Full diff:
+    [
+        200,
+  -     403,
+  ?     ^ ^
+  +     200,
+  ?     ^ ^
+    ]
+FAILED tests/test_vulnerabilities.py::test_th04_confused_deputy_blocked - assert 200 == 403
+ +  where 200 = <Response [200]>.status_code
+FAILED tests/test_vulnerabilities.py::test_th05_resource_service_quota_requires_authentication - assert 403 == 401
+ +  where 403 = <Response [403]>.status_code
+FAILED tests/test_vulnerabilities.py::test_th06_search_filtered_by_ownership - assert [1, 2] == [2]
+  
+  At index 0 diff: 1 != 2
+  Left contains one more item: 2
+  
+  Full diff:
+    [
+  +     1,
+        2,
+    ]
+FAILED tests/test_vulnerabilities.py::test_export_retrieval_blocked_for_non_owner - assert 200 == 403
+ +  where 200 = <Response [200]>.status_code
+======================== 7 failed, 7 passed in 15.26s =========================
