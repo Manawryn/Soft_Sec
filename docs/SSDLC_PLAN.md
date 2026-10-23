@@ -145,3 +145,29 @@ $$\text{Asset} \longrightarrow \text{Threat} \longrightarrow \text{Control / Req
   - **Gate Rule:** Zero unpinned or vulnerable package dependencies.
 - **Test Engine:** `pytest -v tests/`
   - **Gate Rule:** All functional workflows, ABAC boundaries, and race-condition safety assertions must return exit code 0.
+
+---
+
+## 8. TH-05 / Boundary B4 — Controlled Supply-Chain Experiment (Optional Task)
+
+TH-05's proposed mitigation ("cryptographic hash verification … and minimal
+execution privileges") is implemented and demonstrated end-to-end under
+`supply_chain/`, independent of the `main`/`fixed-version` split — it is a
+dependency-integrity control, not a patch to one of the three services, so
+it is identical on both branches.
+
+- **`supply_chain/manifest.json`** is the consumer-controlled manifest: it
+  pins the SHA-256 digest of the one `data_exporter` build the project
+  actually trusts, rather than trusting its declared name/version string.
+- **`supply_chain/verify_and_install.py`** is the gate: it refuses to
+  install any wheel whose content hash doesn't match the manifest.
+- **Experiment A** (`run_experiment_A.py`) builds a legitimate `data_exporter`
+  1.1.0 release and shows the gate approves and installs it.
+- **Experiment B** (`run_experiment_B.py`) builds a malicious `data_exporter`
+  release under the *identical* package name and version string — the exact
+  TH-05 scenario — and shows: (1) the gate correctly rejects it on hash
+  mismatch, proving version pinning alone would have missed it; and (2), for
+  contrast, what happens if the gate is bypassed: the compromised package
+  exfiltrates a local fixture database to a local attacker catcher on import.
+
+See `supply_chain/README.md` for full instructions and sample output.

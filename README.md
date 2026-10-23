@@ -6,8 +6,8 @@ authorization breaks across component boundaries.
 
 | Branch | Purpose | Expected pipeline result |
 | :--- | :--- | :--- |
-| `main` | Vulnerable baseline with 4 intentionally planted flaws | **Red**: 4 security tests fail, security gate reports 6 findings |
-| `fixed-version` | Same application with all 4 flaws remediated | **Green**: 11/11 tests pass, gate passes |
+| `main` | Vulnerable baseline with 4 intentionally planted flaws | **Red**: 7/14 tests fail, security gate reports 8 Bandit findings |
+| `fixed-version` | Same application with all 4 flaws remediated | **Green**: 14/14 tests pass, gate passes |
 
 > `main` is deliberately insecure. Never deploy it.
 
@@ -171,12 +171,14 @@ python -m pytest -v
 
 | Branch | Expected result |
 | :--- | :--- |
-| `main` | 7 passed, 4 failed (`test_th01` to `test_th04`) |
-| `fixed-version` | 11 passed |
+| `main` | 7 passed, 7 failed |
+| `fixed-version` | 14 passed |
 
 The suite contains functional tests (login, owner and admin read, owner
-export), the four security tests, and three malformed-input tests (missing
-token, tampered token, missing payload).
+export), the four STRIDE/TH-01–TH-04 security tests, three additional
+authorization tests (TH-05 authenticated-quota, TH-06 search filtered by
+ownership, export retrieval blocked for non-owner), and three
+malformed-input tests (missing token, tampered token, missing payload).
 
 ### Static analysis and dependency audit
 
@@ -189,7 +191,7 @@ python -m pip_audit --local
 
 | Branch | `security_gate.py` result |
 | :--- | :--- |
-| `main` | `GATE FAILED: 6 blocking finding(s)` (B608, 3 x B113, 2 x B105) |
+| `main` | `GATE FAILED: 8 blocking finding(s)` (B608, 4 x B113, 3 x B105) |
 | `fixed-version` | `GATE PASSED` |
 
 The gate blocks on any MEDIUM or HIGH finding and on any hardcoded-credential
@@ -229,8 +231,8 @@ The Jenkinsfile alone is not enough. The Jenkins instance needs:
 
 | Branch | Tests | Dependency audit | Gate | Build |
 | :--- | :--- | :--- | :--- | :--- |
-| `main` | 4 failed, 7 passed | clean | failed | Red |
-| `fixed-version` | 11 passed | clean | passed | Green |
+| `main` | 7 failed, 7 passed | clean | failed | Red |
+| `fixed-version` | 14 passed | clean | passed | Green |
 
 Saved results from both builds are in [`evidence/`](evidence/).
 
@@ -250,23 +252,53 @@ Saved results from both builds are in [`evidence/`](evidence/).
 
 ## 8. Known limitations
 
-- **Job-scoped tokens are not yet implemented.** `fixed-version` forwards the
-  caller's full session JWT to the Processing Service. The plan in
-  `docs/SSDLC_PLAN.md` describes a short-lived token bound to user, dataset,
-  action and audience as the intended control.
-- The export result is returned inline. It is not yet stored back in the
-  Resource Service and fetched by the user.
-- `/resources/quota/consume` takes a `user_id` from the request body.
-- The optional supply-chain experiments are not yet implemented.
 - HTTP only, no TLS. Not production-ready (see the report).
+- `data_exporter` (`external_pkg/`) still executes with the same privileges
+  as the Processing Service process; the supply-chain control in
+  `supply_chain/` verifies its content hash before install, but does not
+  sandbox it at runtime.
 
-## 9. Repository layout
+On `fixed-version`, job-scoped delegation tokens (short-lived, bound to
+`user_id`, `dataset_id`, `action` and `aud`), authenticated/ownership-filtered
+search and quota endpoints, and the export save/retrieve flow (export results
+are persisted in the Resource Service and fetched back by export ID, matching
+the plan in `docs/SSDLC_PLAN.md`) are all implemented — see section 3 above
+and the branch diff for `app_api/app.py` / `resource_service/app.py` /
+`processing_service/app.py`.
+
+## 9. Optional: supply-chain integrity experiment
+
+`supply_chain/` implements and demonstrates the TH-05 / Boundary B4 control
+from `docs/SSDLC_PLAN.md` (section 8 there has the full writeup): a
+consumer-controlled manifest that pins a dependency's SHA-256 content hash,
+independent of its declared package name and version. It is identical on
+both branches since it is a dependency-management control, not a
+service-level fix.
+
+- **Experiment A** — a legitimate `data_exporter` 1.1.0 release is verified
+  against the manifest and installed.
+- **Experiment B** — a malicious `data_exporter` release under the exact same
+  name and version is rejected by the same gate on hash mismatch; a
+  deliberate bypass (skipping the gate, as plain `pip install` would) is then
+  shown actually exfiltrating a local fixture database, to show why the gate
+  matters.
+
+```
+cd supply_chain
+python run_experiment_A.py
+python run_experiment_B.py
+```
+
+See `supply_chain/README.md` for details and sample output.
+
+## 10. Repository layout
 
 ```text
 app_api/              Application API (port 5001)
 resource_service/     Resource Service and SQLite seeding (port 5002)
 processing_service/   Processing Service (port 5003)
-external_pkg/         data_exporter helper package
+external_pkg/         data_exporter helper package (used by the services)
+supply_chain/         Optional TH-05 supply-chain integrity experiment
 tests/                pytest suite and service-lifecycle fixture
 ci/security_gate.py   Release gate over the Bandit report
 docs/SSDLC_PLAN.md    Lifecycle plan, threat model, access matrix
@@ -276,7 +308,7 @@ run_all.bat           Local launcher for the three services (Windows)
 run_all.sh            Local launcher for the three services (Linux / macOS)
 ```
 
-## 10. AI-use declaration
+## 11. AI-use declaration
 
 AI assistants were used for drafting and debugging help. The declaration
 required by the course is submitted separately.
