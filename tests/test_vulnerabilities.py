@@ -2,6 +2,7 @@ import concurrent.futures, os, sqlite3
 import requests
 
 API = "http://127.0.0.1:5001"
+RESOURCE = "http://127.0.0.1:5002"
 DB = os.path.join(os.path.dirname(__file__), "..", "resource_service", "research_vault.db")
 ALICE, BOB, ADMIN = ("alice", "AlicePass!123"), ("bob", "BobPass!456"), ("admin", "AdminSecret!2026")
 
@@ -45,6 +46,21 @@ def test_th03_quota_race_blocked():
 def test_th04_confused_deputy_blocked():
     r = requests.post(f"{API}/api/export-job", json={"dataset_id": 2}, headers=auth(ALICE))
     assert r.status_code == 403
+
+# ---- authority binding (service/resource/action/validity) ----
+def test_th05_resource_service_quota_requires_authentication():
+    # The Resource Service itself must reject an unauthenticated call, not
+    # just the API gateway in front of it - defense in depth. A request
+    # that merely names a user_id in the body (ambient trust) must not work.
+    r = requests.post(f"{RESOURCE}/resources/quota/consume", json={"user_id": 2})
+    assert r.status_code == 401
+
+def test_th06_search_filtered_by_ownership():
+    # A non-admin's search must only ever return their own datasets, not
+    # every user's titles/owners/classifications.
+    r = requests.get(f"{API}/api/datasets/search", params={"q": ""}, headers=auth(BOB))
+    assert r.status_code == 200
+    assert [d["id"] for d in r.json()] == [2]
 
 # ---- malformed artifacts ----
 def test_missing_token_rejected():
