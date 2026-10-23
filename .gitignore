@@ -235,7 +235,7 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-reports/bandit_reports.json
+reports/
 
 # IDE files
 .vscode/
