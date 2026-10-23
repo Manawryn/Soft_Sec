@@ -253,10 +253,11 @@ Saved results from both builds are in [`evidence/`](evidence/).
 ## 8. Known limitations
 
 - HTTP only, no TLS. Not production-ready (see the report).
-- `data_exporter` (`external_pkg/`) still executes with the same privileges
-  as the Processing Service process; the supply-chain control in
-  `supply_chain/` verifies its content hash before install, but does not
-  sandbox it at runtime.
+- `processing_service/sandboxed_dependency.py` isolates `data_exporter`'s
+  working directory and network access (`fixed-version` only — see section
+  9), but it is a Python-level restriction, not an OS-level sandbox
+  (container, chroot, or seccomp). A dependency with native-extension code
+  could bypass it; this is a defense-in-depth measure, not a hard boundary.
 
 On `fixed-version`, job-scoped delegation tokens (short-lived, bound to
 `user_id`, `dataset_id`, `action` and `aud`), authenticated/ownership-filtered
@@ -266,22 +267,28 @@ the plan in `docs/SSDLC_PLAN.md`) are all implemented — see section 3 above
 and the branch diff for `app_api/app.py` / `resource_service/app.py` /
 `processing_service/app.py`.
 
-## 9. Optional: supply-chain integrity experiment
+## 9. Optional: controlled supply-chain attack, Experiment A, Experiment B
 
 `supply_chain/` implements and demonstrates the TH-05 / Boundary B4 control
-from `docs/SSDLC_PLAN.md` (section 8 there has the full writeup): a
-consumer-controlled manifest that pins a dependency's SHA-256 content hash,
-independent of its declared package name and version. It is identical on
-both branches since it is a dependency-management control, not a
-service-level fix.
+from `docs/SSDLC_PLAN.md` (section 8 there has the full writeup). `data_exporter`
+(`external_pkg/`) gets a benign and a malicious fixture build, both declaring
+the identical package name and version; the malicious one exfiltrates the
+Resource Service's real database on import.
 
-- **Experiment A** — a legitimate `data_exporter` 1.1.0 release is verified
-  against the manifest and installed.
-- **Experiment B** — a malicious `data_exporter` release under the exact same
-  name and version is rejected by the same gate on hash mismatch; a
-  deliberate bypass (skipping the gate, as plain `pip install` would) is then
-  shown actually exfiltrating a local fixture database, to show why the gate
-  matters.
+- **Experiment A** (branch-independent) — a consumer-controlled manifest pins
+  the approved build's SHA-256. The genuine build installs normally; a
+  same-identity build with different bytes is rejected on hash mismatch,
+  proving a version pin alone would not have caught it.
+- **Experiment B** (where `main` and `fixed-version` diverge) — the malicious
+  build's digest gets approved as trusted (a scratch manifest, modelling a
+  compromised supplier update that was accepted), installed for real, and run
+  through one ordinary, fully-authorized export request. On `main`,
+  `processing_service` calls the dependency directly and the real database
+  leaks. On `fixed-version`, every call is routed through
+  `processing_service/sandboxed_dependency.py` — an isolated child process
+  with an empty working directory and no outbound network — so the same
+  "approved" malicious build is contained and the legitimate export still
+  completes.
 
 ```
 cd supply_chain
@@ -289,7 +296,7 @@ python run_experiment_A.py
 python run_experiment_B.py
 ```
 
-See `supply_chain/README.md` for details and sample output.
+See `supply_chain/README.md` for the full walkthrough and sample output.
 
 ## 10. Repository layout
 

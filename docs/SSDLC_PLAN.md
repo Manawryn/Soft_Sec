@@ -95,7 +95,7 @@ The system attack surface is modeled as $AS = (I \times W)^E$, where interaction
 | **TH-02** | Elevation of Privilege | App API / Resource Service (`/resources/dataset/<id>`) | Authenticated researcher Alice modifies dataset ID in the request path to access Bob's private dataset. | Authority Failure (Authentication implies authorization / IDOR) | Strict ABAC check: verify `dataset.owner_id == caller.user_id` or `caller.role == 'admin'` prior to query return. |
 | **TH-03** | Tampering | Resource Service (`/resources/quota/consume`) | Attacker initiates concurrent asynchronous export requests to decrement quota below zero. | State Failure (Unsafe concurrency / Race condition) | Atomic transactions (`BEGIN EXCLUSIVE`) and conditional SQL updates (`WHERE quota >= required`). |
 | **TH-04** | Elevation of Privilege | Processing Service ⟷ Resource Service | Confused Deputy: Processing service uses ambient service-to-service trust to read Bob's dataset when executing an export requested by Alice. | Composition Flaw (Cross-boundary authority loss) | Scoped Job Tokens: Application API issues a short-lived token binding `user_id`, `dataset_id`, and `exp`. Resource Service validates token scope before returning records. |
-| **TH-05** | Tampering | Processing Service ⟷ Dependency | Supply chain compromise: Malicious package version installed attempting to exfiltrate database records to external hosts. | Supply Chain Flaw (Unverified external artifact) | Cryptographic hash verification (SHA-256 digests in `requirements.txt` / `pip` hash checking) and minimal execution privileges. |
+| **TH-05** | Tampering | Processing Service ⟷ Dependency | Supply chain compromise: Malicious package version installed attempting to exfiltrate database records to external hosts. | Supply Chain Flaw (Unverified external artifact) | Consumer-controlled manifest with SHA-256 verification at install time (`supply_chain/verify_and_install.py`), **and** runtime isolation of every dependency call — empty working directory, no outbound network (`processing_service/sandboxed_dependency.py`, `fixed-version` only) — so a mistakenly-approved malicious build is still contained. See section 8. |
 
 ---
 
@@ -150,24 +150,50 @@ $$\text{Asset} \longrightarrow \text{Threat} \longrightarrow \text{Control / Req
 
 ## 8. TH-05 / Boundary B4 — Controlled Supply-Chain Experiment (Optional Task)
 
-TH-05's proposed mitigation ("cryptographic hash verification … and minimal
-execution privileges") is implemented and demonstrated end-to-end under
-`supply_chain/`, independent of the `main`/`fixed-version` split — it is a
-dependency-integrity control, not a patch to one of the three services, so
-it is identical on both branches.
+TH-05's control is implemented and demonstrated end-to-end under
+`supply_chain/`, in two independent layers, matching the assignment's
+"Controlled supply chain attack," "Experiment A," and "Experiment B"
+tasks (each separately optional; all three are attempted here).
 
 - **`supply_chain/manifest.json`** is the consumer-controlled manifest: it
   pins the SHA-256 digest of the one `data_exporter` build the project
   actually trusts, rather than trusting its declared name/version string.
-- **`supply_chain/verify_and_install.py`** is the gate: it refuses to
-  install any wheel whose content hash doesn't match the manifest.
-- **Experiment A** (`run_experiment_A.py`) builds a legitimate `data_exporter`
-  1.1.0 release and shows the gate approves and installs it.
-- **Experiment B** (`run_experiment_B.py`) builds a malicious `data_exporter`
-  release under the *identical* package name and version string — the exact
-  TH-05 scenario — and shows: (1) the gate correctly rejects it on hash
-  mismatch, proving version pinning alone would have missed it; and (2), for
-  contrast, what happens if the gate is bypassed: the compromised package
-  exfiltrates a local fixture database to a local attacker catcher on import.
+  This file and its approved digest are identical on both branches.
+- **`supply_chain/verify_and_install.py`** is the install-time gate: it
+  refuses to install any wheel whose content hash doesn't match the
+  manifest. This part of the control is identical on both branches too.
+- **Experiment A** (`run_experiment_A.py`): the genuinely approved
+  `data_exporter` 1.1.0 build installs normally; a second build declaring
+  the *identical* name and version but different bytes is rejected on
+  hash mismatch — proving a version pin alone (`data_exporter==1.1.0`)
+  would not have caught it.
+- **Experiment B** (`run_experiment_B.py`): the harder case — the
+  malicious build's digest gets explicitly approved as trusted (a scratch
+  manifest only, never the real one), modelling a compromised supplier
+  update that was accepted. The malicious wheel is then installed for
+  real and the three services are started exactly as they run normally;
+  a single ordinary, fully-authorized export request (Alice exporting her
+  own dataset) triggers the real workflow. **This is where the two
+  branches diverge**, and it is the one place this optional task touches
+  a service's own code:
+  - On `main`, `processing_service/app.py` imports and calls
+    `data_exporter` directly. The malicious build's search for
+    `resource_service/research_vault.db` succeeds (same process, same
+    working directory as the real service) and exfiltrates the real
+    database to a local attacker listener the moment the service starts.
+    **Verdict: COMPROMISED.**
+  - On `fixed-version`, `processing_service/app.py` instead routes every
+    call through `processing_service/sandboxed_dependency.py`: a second,
+    independent control that runs the dependency in a child process with
+    an empty working directory and no outbound sockets, *regardless of
+    whether its digest was ever approved*. The malicious code still runs,
+    but has nothing to find and nowhere to send it; Alice's legitimate
+    export still completes normally, because the library's real job
+    (formatting numbers into text) needs neither disk nor network access.
+    **Verdict: CONTAINED.**
 
-See `supply_chain/README.md` for full instructions and sample output.
+This gives TH-05 the same two mitigations the assignment asks for: a
+hash-based gate at install time (defeated once a bad digest is approved,
+by design — that is the premise of Experiment B) and a genuine runtime
+isolation control that does not depend on the gate having worked. See
+`supply_chain/README.md` for full instructions and sample output.
