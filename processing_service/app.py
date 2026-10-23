@@ -26,11 +26,20 @@ def export_job():
     summary_text = data_exporter.summarize_metrics(record.get("title"), metrics_list)
     csv_data = data_exporter.format_record_to_csv(record)
 
+    # Save the artifact back to the Resource Service using the SAME
+    # job-scoped token (still bound to this dataset/action/validity period)
+    # instead of returning it inline; the user retrieves it separately.
+    save_res = requests.post(f"{RESOURCE_SERVICE_URL}/resources/exports",
+                              headers=headers,
+                              json={"dataset_id": dataset_id, "summary": summary_text, "csv_data": csv_data},
+                              timeout=3)
+    if save_res.status_code != 201:
+        return jsonify({"error": "Failed to save export"}), save_res.status_code
+
     return jsonify({
         "status": "COMPLETED",
         "dataset_id": dataset_id,
-        "summary": summary_text,
-        "csv_export": csv_data
+        "export_id": save_res.json()["export_id"]
     }), 200
 
 if __name__ == "__main__":

@@ -133,5 +133,50 @@ def consume_quota():
 
     return jsonify({"message": "Quota consumed successfully", "remaining_quota": new_quota}), 200
 
+# Save a completed export. Only a job-scoped delegation token for THIS
+# dataset and the "export" action may write a record (assignment Figure 1:
+# the pipeline saves the artifact, it is not returned inline).
+@app.route("/resources/exports", methods=["POST"])
+def save_export():
+    claims = decode_token(request)
+    if not claims:
+        return jsonify({"error": "Unauthorized"}), 401
+    if claims.get("aud") != "resource_service" or claims.get("action") != "export":
+        return jsonify({"error": "Token not valid for this action"}), 403
+
+    data = request.get_json() or {}
+    dataset_id = data.get("dataset_id")
+    if dataset_id != claims.get("dataset_id"):
+        return jsonify({"error": "dataset_id does not match token scope"}), 403
+
+    owner_id = claims.get("user_id")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO exports (dataset_id, owner_id, summary, csv_data) VALUES (?, ?, ?, ?)",
+                   (dataset_id, owner_id, data.get("summary", ""), data.get("csv_data", "")))
+    conn.commit()
+    export_id = cursor.lastrowid
+    conn.close()
+    return jsonify({"export_id": export_id}), 201
+
+# Retrieve a saved export. Ordinary session token only; owner or admin.
+@app.route("/resources/exports/<int:export_id>", methods=["GET"])
+def get_export(export_id):
+    claims = decode_token(request)
+    if not claims:
+        return jsonify({"error": "Unauthorized"}), 401
+    requester_id = claims.get("user_id")
+    requester_role = claims.get("role")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM exports WHERE id = ? AND (owner_id = ? OR ? = 'admin')",
+                   (export_id, requester_id, requester_role))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Export not found or access denied"}), 403
+    return jsonify(dict(row)), 200
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5002, debug=False)

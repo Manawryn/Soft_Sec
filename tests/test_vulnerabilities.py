@@ -25,6 +25,10 @@ def test_admin_reads_any_dataset():
 def test_owner_exports_own_dataset():
     r = requests.post(f"{API}/api/export-job", json={"dataset_id": 1}, headers=auth(ALICE))
     assert r.status_code == 200 and r.json()["status"] == "COMPLETED"
+    export_id = r.json()["export_id"]
+    # The artifact is saved, not returned inline - the owner retrieves it separately.
+    r2 = requests.get(f"{API}/api/exports/{export_id}", headers=auth(ALICE))
+    assert r2.status_code == 200 and "csv_data" in r2.json()
 
 # ---- security (TH-01..TH-04) ----
 def test_th01_sql_injection_neutralised():
@@ -61,6 +65,14 @@ def test_th06_search_filtered_by_ownership():
     r = requests.get(f"{API}/api/datasets/search", params={"q": ""}, headers=auth(BOB))
     assert r.status_code == 200
     assert [d["id"] for d in r.json()] == [2]
+
+def test_export_retrieval_blocked_for_non_owner():
+    # Saved export artifacts are owned the same way datasets are - one
+    # user's completed export must not be readable by another user.
+    r = requests.post(f"{API}/api/export-job", json={"dataset_id": 1}, headers=auth(ALICE))
+    export_id = r.json()["export_id"]
+    r2 = requests.get(f"{API}/api/exports/{export_id}", headers=auth(BOB))
+    assert r2.status_code == 403
 
 # ---- malformed artifacts ----
 def test_missing_token_rejected():

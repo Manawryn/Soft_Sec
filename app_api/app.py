@@ -104,5 +104,14 @@ def export_job(current_user):
     except Exception as e:
         return jsonify({"error": f"Pipeline failed: {str(e)}"}), 502
 
+# Retrieve a previously completed export. Forwards the caller's own session
+# token, so the Resource Service's ownership/admin check applies.
+@app.route("/api/exports/<int:export_id>", methods=["GET"])
+@token_required
+def get_export(current_user, export_id):
+    headers = {"Authorization": request.headers.get("Authorization")}
+    res = requests.get(f"{RESOURCE_SERVICE_URL}/resources/exports/{export_id}", headers=headers, timeout=3)
+    return jsonify(res.json()), res.status_code
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5001, debug=False)

@@ -13,6 +13,7 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
+    cursor.execute("DROP TABLE IF EXISTS exports")
     cursor.execute("DROP TABLE IF EXISTS datasets")
     cursor.execute("DROP TABLE IF EXISTS users")
 
@@ -31,8 +32,23 @@ def init_db():
         classification TEXT DEFAULT 'CONFIDENTIAL',
         FOREIGN KEY (owner_id) REFERENCES users (id))""")
 
+    # Completed export jobs, saved by the Processing Service and later
+    # retrieved by the requesting user through the Application API
+    # (assignment Figure 1: the pipeline saves the artifact rather than
+    # returning it inline).
+    cursor.execute("""CREATE TABLE exports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dataset_id INTEGER NOT NULL,
+        owner_id INTEGER NOT NULL,
+        summary TEXT NOT NULL,
+        csv_data TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (dataset_id) REFERENCES datasets (id),
+        FOREIGN KEY (owner_id) REFERENCES users (id))""")
+
     cursor.execute("DELETE FROM users")
     cursor.execute("DELETE FROM datasets")
+    cursor.execute("DELETE FROM exports")
 
     # Seed users with salted password hashes (Secure Design: passwords never stored in plaintext)
     users = [
