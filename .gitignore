@@ -235,7 +235,6 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-reports/
 
 # IDE files
 .vscode/
