@@ -31,12 +31,19 @@ def export_job():
     summary_text = data_exporter.summarize_metrics(record.get("title"), metrics_list)
     csv_data = data_exporter.format_record_to_csv(record)
 
+    # Save the artifact back to the Resource Service instead of returning it
+    # inline (assignment Figure 1); the user retrieves it separately.
+    save_res = requests.post(f"{RESOURCE_SERVICE_URL}/resources/internal/exports",
+                              headers=headers,
+                              json={"dataset_id": dataset_id, "summary": summary_text, "csv_data": csv_data},
+                              timeout=3)
+    export_id = save_res.json().get("export_id") if save_res.status_code == 201 else None
+
     return jsonify({
         "status": "COMPLETED",
         "dataset_id": dataset_id,
         "classification": record.get("classification"),
-        "summary": summary_text,
-        "csv_export": csv_data
+        "export_id": export_id
     }), 200
 
 if __name__ == "__main__":

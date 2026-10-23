@@ -104,6 +104,46 @@ def internal_get_dataset(dataset_id):
         return jsonify({"error": "Dataset not found"}), 404
     return jsonify(dict(row)), 200
 
+# Internal save target used by Processing Service once an export completes
+# (assignment Figure 1: the artifact is saved here, not returned inline).
+@app.route("/resources/internal/exports", methods=["POST"])
+def save_export_internal():
+    # INTENTIONAL FLAW (same root cause as Vulnerability 4): trusts the
+    # ambient internal header only, with no caller-scoped authority check.
+    internal_token = request.headers.get("X-Internal-Service")
+    if internal_token != "processing-engine-internal-secret":
+        return jsonify({"error": "Unauthorized internal call"}), 403
+
+    data = request.get_json() or {}
+    dataset_id = data.get("dataset_id")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT owner_id FROM datasets WHERE id = ?", (dataset_id,))
+    dataset = cursor.fetchone()
+    if not dataset:
+        conn.close()
+        return jsonify({"error": "Dataset not found"}), 404
+
+    cursor.execute("INSERT INTO exports (dataset_id, owner_id, summary, csv_data) VALUES (?, ?, ?, ?)",
+                   (dataset_id, dataset["owner_id"], data.get("summary", ""), data.get("csv_data", "")))
+    conn.commit()
+    export_id = cursor.lastrowid
+    conn.close()
+    return jsonify({"export_id": export_id}), 201
+
+# VULNERABILITY 2b (same class as Vulnerability 2: Authority Failure / IDOR)
+@app.route("/resources/exports/<int:export_id>", methods=["GET"])
+def get_export(export_id):
+    # INTENTIONAL FLAW: Does not verify that the requester owns this export
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM exports WHERE id = ?", (export_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Export not found"}), 404
+    return jsonify(dict(row)), 200
+
 if __name__ == "__main__":
     if not os.path.exists(DB_FILE):
         init_db()

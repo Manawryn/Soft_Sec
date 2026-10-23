@@ -99,6 +99,14 @@ def export_job(current_user):
     except Exception as e:
         return jsonify({"error": f"Failed to contact Processing pipeline: {str(e)}"}), 502
 
+# Retrieve a previously completed export (assignment Figure 1: the user
+# fetches the saved artifact rather than getting it back inline).
+@app.route("/api/exports/<int:export_id>", methods=["GET"])
+@token_required
+def get_export(current_user, export_id):
+    res = requests.get(f"{RESOURCE_SERVICE_URL}/resources/exports/{export_id}")
+    return jsonify(res.json()), res.status_code
+
 if __name__ == "__main__":
     print("[*] Starting Application API Gateway on port 5001...")
     app.run(host="127.0.0.1", port=5001, debug=False)
