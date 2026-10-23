@@ -1,0 +1,23 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.4, pytest-9.1.1, pluggy-1.7.0 -- C:\ProgramData\Jenkins\.jenkins\workspace\ISRM_Security_Pipeline@2\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\ProgramData\Jenkins\.jenkins\workspace\ISRM_Security_Pipeline@2
+collecting ... collected 14 items
+
+tests/test_vulnerabilities.py::test_login_rejects_bad_password PASSED    [  7%]
+tests/test_vulnerabilities.py::test_owner_reads_own_dataset PASSED       [ 14%]
+tests/test_vulnerabilities.py::test_admin_reads_any_dataset PASSED       [ 21%]
+tests/test_vulnerabilities.py::test_owner_exports_own_dataset PASSED     [ 28%]
+tests/test_vulnerabilities.py::test_th01_sql_injection_neutralised PASSED [ 35%]
+tests/test_vulnerabilities.py::test_th02_idor_blocked PASSED             [ 42%]
+tests/test_vulnerabilities.py::test_th03_quota_race_blocked PASSED       [ 50%]
+tests/test_vulnerabilities.py::test_th04_confused_deputy_blocked PASSED  [ 57%]
+tests/test_vulnerabilities.py::test_th05_resource_service_quota_requires_authentication PASSED [ 64%]
+tests/test_vulnerabilities.py::test_th06_search_filtered_by_ownership PASSED [ 71%]
+tests/test_vulnerabilities.py::test_export_retrieval_blocked_for_non_owner PASSED [ 78%]
+tests/test_vulnerabilities.py::test_missing_token_rejected PASSED        [ 85%]
+tests/test_vulnerabilities.py::test_tampered_token_rejected PASSED       [ 92%]
+tests/test_vulnerabilities.py::test_missing_payload_rejected PASSED      [100%]
+
+- generated xml file: C:\ProgramData\Jenkins\.jenkins\workspace\ISRM_Security_Pipeline@2\reports\junit.xml -
+============================= 14 passed in 4.78s ==============================
