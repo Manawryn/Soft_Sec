@@ -1,0 +1,11 @@
+{
+  "comment": "Consumer-controlled dependency manifest (SSDLC_PLAN.md TH-05 / Boundary B4). The project only trusts a data_exporter wheel whose SHA-256 digest matches the entry below, independent of its declared name and version, which a compromised build can also forge.",
+  "approved": {
+    "data_exporter": {
+      "version": "1.1.0",
+      "filename": "data_exporter-1.1.0-py3-none-any.whl",
+      "sha256": "e04da2d814da496b450025ae98cf09db5f67a060b87257e531a12f7811858f25",
+      "source": "built in-repo from supply_chain/packages/benign (Experiment A)"
+    }
+  }
+}
